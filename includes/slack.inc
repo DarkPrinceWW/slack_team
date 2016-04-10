@@ -30,7 +30,7 @@ class Slack {
     }
 
     if (empty($this->timestamp)) {
-      $this->timestamp = time();
+      $this->timestamp = REQUEST_TIME;
     }
   }
 

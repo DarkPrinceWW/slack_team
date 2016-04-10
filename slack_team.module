@@ -27,10 +27,13 @@ function slack_team_menu() {
  * Implements hook_block_info().
  */
 function slack_team_block_info() {
+  $blocks = array();
+
   $blocks['slack_team_channel'] = array(
     'info' => t('Slack Team channel'),
     'cache' => DRUPAL_NO_CACHE,
   );
+
   return $blocks;
 }
 
