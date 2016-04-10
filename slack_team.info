@@ -1,0 +1,8 @@
+name = Slack Team
+description = Get info on your team's Slack.
+core = 7.x
+configure = admin/config/services/slack-team
+
+; Slack API includes
+files[] = includes/slack.inc
+files[] = includes/slack_channels.inc

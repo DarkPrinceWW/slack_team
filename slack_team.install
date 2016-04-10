@@ -1,0 +1,19 @@
+<?php
+
+/**
+ * @file
+ * Installation and uninstallation functions.
+ */
+
+/**
+ * Implements hook_uninstall().
+ */
+function slack_team_uninstall() {
+  // Delete created variables.
+  variable_del('slack_team_token');
+  variable_del('slack_team_channel');
+  variable_del('slack_team_days');
+  variable_del('slack_team_inclusive');
+  variable_del('slack_team_count');
+  variable_del('slack_team_unreads');
+}

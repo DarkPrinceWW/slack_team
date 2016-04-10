@@ -1,0 +1,225 @@
+<?php
+
+/**
+ * @file
+ * Module hook implementations.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function slack_team_menu() {
+  $items = array();
+
+  $items['admin/config/services/slack-team'] = array(
+    'title' => 'Slack Team Settings',
+    'description' => 'Integrate your site with Slack.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('slack_team_admin_settings'),
+    'access arguments' => array('administer site configuration'),
+    'file' => 'slack_team.admin.inc',
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function slack_team_block_info() {
+  $blocks['slack_team_channel'] = array(
+    'info' => t('Slack Team channel'),
+    'cache' => DRUPAL_NO_CACHE,
+  );
+  return $blocks;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function slack_team_theme() {
+  return array(
+    'slack_team_status' => array(
+      'variables' => array('status' => FALSE),
+    ),
+    'slack_team_history' => array(
+      'variables' => array('messages' => array()),
+    ),
+  );
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function slack_team_block_view($delta = '') {
+  $block = array();
+
+  switch ($delta) {
+    case 'slack_team_channel':
+      $block['subject'] = t('Slack Team');
+      $block['content'] = slack_team_view_history();
+      break;
+  }
+
+  return $block;
+}
+
+/**
+ * Displays the messages history of slack team.
+ */
+function slack_team_view_history() {
+  $messages = array();
+  $results = slack_team_get_history();
+  $data = slack_team_request_handler($results);
+
+  if (isset($data->messages)) {
+    $messages = $data->messages;
+  }
+
+  // Allow modules to modify messages.
+  drupal_alter('slack_team_view_history', $messages);
+
+  return theme('slack_team_history', array('messages' => $messages));
+}
+
+/**
+ * Theme handler for theme('slack_team_status').
+ */
+function theme_slack_team_status($variables) {
+  $items = array();
+  $status = $variables['status'];
+
+  if ($status) {
+    $icon = theme('image', array(
+      'path' => 'misc/watchdog-ok.png',
+    ));
+
+    $items[] = t('!status_icon token is valid.', array('!status_icon' => $icon));
+  }
+  else {
+    $icon = theme('image', array(
+      'path' => 'misc/watchdog-error.png',
+    ));
+
+    $items[] = t('!status_icon token is not valid.', array('!status_icon' => $icon));
+  }
+
+  return theme('item_list', array('items' => $items));
+}
+
+/**
+ * Theme handler for theme('slack_team_history').
+ */
+function theme_slack_team_history($variables) {
+  $messages = $variables['messages'];
+  $header = array(
+    t('User'),
+    t('Text'),
+    t('Date'),
+  );
+
+  $rows = array();
+  if (!empty($messages)) {
+    foreach ($messages as $message) {
+      $rows[] = array(
+        $message->user,
+        $message->text,
+        format_date(intval($message->ts)),
+      );
+    }
+  }
+
+  return theme('table', array(
+    'header' => $header,
+    'rows' => $rows,
+    'empty' => t('No content available.'),
+  ));
+}
+
+/**
+ * Form element validation handler.
+ */
+function _slack_team_messages_count_validate($element, &$form_state) {
+  if (!empty($element['#value'])) {
+    if (!is_numeric($element['#value'])) {
+      form_error($element, t('The "!name" option must contain a numeric value.', array('!name' => $element['#title'])));
+    }
+    elseif (($element['#value'] < 1) || ($element['#value'] > 1000)) {
+      form_error($element, t('The "!name" option must contain a valid value.', array('!name' => $element['#title'])));
+    }
+  }
+}
+
+/**
+ * Handles errors in requests. On success returns the request data.
+ *
+ * @param object $results
+ *   The results of request.
+ *
+ * @return mixed
+ *   On failure returns FALSE.
+ *   On success returns the request data.
+ */
+function slack_team_request_handler($results) {
+  if (!empty($results->error)) {
+    $message = 'Query returned ' . $results->code . ' response. Error: !error.';
+    watchdog('slack_team', $message, array('!error' => $results->error));
+    return FALSE;
+  }
+  else {
+    $data = json_decode($results->data);
+    if (empty($data->ok)) {
+      $message = 'Query returned ' . $results->code . ' response. Error: !error.';
+      watchdog('slack_team', $message, array('!error' => $data->error));
+      return FALSE;
+    }
+  }
+
+  return $data;
+}
+
+/**
+ * Return a data of messages history.
+ */
+function slack_team_get_history() {
+  $settings = array(
+    'token' => variable_get('slack_team_token', ''),
+    'channel' => variable_get('slack_team_channel', ''),
+    'count' => variable_get('slack_team_count', 100),
+    'inclusive' => variable_get('slack_team_inclusive', 0),
+    'unreads' => variable_get('slack_team_unreads', 0),
+    'latest' => REQUEST_TIME,
+  );
+
+  $days = variable_get('slack_team_days', 0);
+  if (!empty($days)) {
+    $settings['oldest'] = strtotime('-' . $days . ' day', REQUEST_TIME);
+  }
+
+  $slack = new SlackChannels($settings);
+  return $slack->getHistory();
+}
+
+/**
+ * Return a data of channels list.
+ */
+function slack_team_get_list() {
+  $settings = array(
+    'token' => variable_get('slack_team_token', ''),
+  );
+
+  $slack = new SlackChannels($settings);
+  return $slack->getList();
+}
+
+/**
+ * Return the current state of authentication.
+ */
+function slack_team_auth_test() {
+  $settings = array(
+    'token' => variable_get('slack_team_token', ''),
+  );
+
+  $slack = new Slack($settings);
+  return $slack->authTest();
+}
